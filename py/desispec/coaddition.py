@@ -11,7 +11,7 @@ import scipy.sparse
 import scipy.linalg
 import scipy.sparse.linalg
 
-from astropy.table import Column
+from astropy.table import Column, Table
 
 # for debugging
 import astropy.io.fits as pyfits
@@ -33,6 +33,8 @@ def coadd_fibermap(fibermap) :
     targets = np.unique(fibermap["TARGETID"])
     ntarget = targets.size
 
+    info_cols = ['TARGETID','EXPID', 'MJD','FIBER','EXPTIME']
+    info_tab = []
 
     jj=np.zeros(ntarget,dtype=int)
     for i,tid in enumerate(targets) :
@@ -77,6 +79,11 @@ def coadd_fibermap(fibermap) :
         tfmap['COADD_NUMEXP'][i] = np.count_nonzero(good_coadds)
         if 'EXPTIME' in fibermap.colnames :
             tfmap['COADD_EXPTIME'][i] = np.sum(fibermap['EXPTIME'][jj][good_coadds])
+
+        curcopy = fibermap[good_coadds].copy()
+        curcopy.keep_cols(info_cols)
+        info_tab.append(curcopy)
+                                      
         for k in ['DELTA_X','DELTA_Y'] :
             if k in fibermap.colnames :
                 vals=fibermap[k][jj]
@@ -95,8 +102,8 @@ def coadd_fibermap(fibermap) :
         for k in ['FIBER_RA_IVAR', 'FIBER_DEC_IVAR','DELTA_X_IVAR', 'DELTA_Y_IVAR'] :
             if k in fibermap.colnames :
                 tfmap[k][i]=np.sum(fibermap[k][jj])
-
-    return tfmap
+    info_tab = atpy.vstack(info_tab)
+    return tfmap, info_tab
 
 def coadd(spectra, cosmics_nsig=0.) :
     """
@@ -206,7 +213,7 @@ def coadd(spectra, cosmics_nsig=0.) :
             spectra.mask[b] = tmask
         spectra.resolution_data[b] = trdata
 
-    spectra.fibermap=coadd_fibermap(spectra.fibermap)
+    spectra.fibermap, coadd_info =coadd_fibermap(spectra.fibermap)
     spectra.scores=None
 
 def coadd_cameras(spectra,cosmics_nsig=0.) :
@@ -362,9 +369,9 @@ def coadd_cameras(spectra,cosmics_nsig=0.) :
             rdata[i][:,ok] /= ivar_unmasked[i][ok]
 
     if 'COADD_NUMEXP' in spectra.fibermap.colnames:
-        fibermap = spectra.fibermap
+        fibermap, coadd_info = spectra.fibermap, None
     else:
-        fibermap = coadd_fibermap(spectra.fibermap)
+        fibermap, coadd_info = coadd_fibermap(spectra.fibermap)
 
     bands=""
     for b in sbands :
